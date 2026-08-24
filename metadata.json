@@ -1,0 +1,6 @@
+{
+  "name": "AI Tools Hub - Affiliate & Discovery Platform",
+  "description": "Nền tảng tìm kiếm, đánh giá, so sánh và kết nối các công cụ AI hàng đầu cho Văn phòng, Designer, Creator, Voice AI và Developer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
