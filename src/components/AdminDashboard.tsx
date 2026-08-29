@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { Tool, AnalyticsSummary, TargetUser, PricingType } from '../types';
+import { Tool, AnalyticsSummary, TargetUser, PricingType, PluginTool } from '../types';
 import {
   SlidersHorizontal,
   BarChart3,
@@ -21,7 +20,10 @@ import {
   Unlock,
   ShieldCheck,
   Save,
-  X
+  X,
+  Puzzle,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -29,12 +31,38 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'tools' | 'affiliate' | 'settings'>('analytics');
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // default unlocked for demo convenience
+  const [activeTab, setActiveTab] = useState<'analytics' | 'tools' | 'affiliate' | 'plugins' | 'settings'>('analytics');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('admin_token') === 'admin_session_token_minhthuc2026';
+  });
+
+  // Login Form state
+  const [loginUsername, setLoginUsername] = useState('admin@minhthucmkt.vn');
+  const [loginPassword, setLoginPassword] = useState('MinhThuc2026@Admin');
+  const [loginError, setLoginError] = useState('');
+
   const [tools, setTools] = useState<Tool[]>([]);
+  const [plugins, setPlugins] = useState<PluginTool[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Editing Plugin State
+  const [editingPlugin, setEditingPlugin] = useState<PluginTool | null>(null);
+  const [isAddPluginModalOpen, setIsAddPluginModalOpen] = useState(false);
+  const [pluginFormData, setPluginFormData] = useState<Partial<PluginTool>>({
+    name: '',
+    slug: '',
+    description: '',
+    icon_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&auto=format&fit=crop&q=80',
+    badge_text: 'HOT AI',
+    type: 'iframe',
+    external_url: 'https://',
+    embed_code: '',
+    category: 'office',
+    status: 'active'
+  });
+
 
   // Editing Tool State
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
@@ -69,6 +97,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     cons: ['Cần kết nối mạng']
   });
 
+  const fetchPlugins = async () => {
+    try {
+      const res = await fetch('/api/plugins');
+      if (res.ok) {
+        const data = await res.json();
+        setPlugins(data.plugins || []);
+      }
+    } catch (err) {
+      console.error('Error fetching plugins:', err);
+    }
+  };
+
   const fetchAdminData = async () => {
     setLoading(true);
     try {
@@ -85,6 +125,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         const aData = await analyticsRes.json();
         setAnalytics(aData);
       }
+      fetchPlugins();
     } catch (err) {
       console.error('Error fetching admin data:', err);
     } finally {
@@ -93,8 +134,91 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   };
 
   useEffect(() => {
-    fetchAdminData();
-  }, []);
+    if (isAuthenticated) {
+      fetchAdminData();
+    }
+  }, [isAuthenticated]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginUsername, password: loginPassword })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('admin_token', data.token);
+        setIsAuthenticated(true);
+      } else {
+        const err = await res.json();
+        setLoginError(err.error || 'Đăng nhập không thành công');
+      }
+    } catch {
+      if ((loginUsername === 'admin@minhthucmkt.vn' || loginUsername === 'admin') && loginPassword === 'MinhThuc2026@Admin') {
+        localStorage.setItem('admin_token', 'admin_session_token_minhthuc2026');
+        setIsAuthenticated(true);
+      } else {
+        setLoginError('Tên đăng nhập hoặc mật khẩu không chính xác');
+      }
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('admin_token');
+    setIsAuthenticated(false);
+  };
+
+  const handleSavePlugin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pluginFormData.name || !pluginFormData.slug) {
+      alert('Vui lòng điền tên và slug của Plugin/Công cụ');
+      return;
+    }
+
+    try {
+      if (editingPlugin) {
+        const res = await fetch(`/api/plugins/${editingPlugin.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pluginFormData)
+        });
+        if (res.ok) {
+          alert('Cập nhật Plugin thành công!');
+          setEditingPlugin(null);
+          fetchPlugins();
+        }
+      } else {
+        const res = await fetch('/api/plugins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pluginFormData)
+        });
+        if (res.ok) {
+          alert('Thêm Plugin mới thành công!');
+          setIsAddPluginModalOpen(false);
+          fetchPlugins();
+        }
+      }
+    } catch (err) {
+      console.error('Error saving plugin:', err);
+    }
+  };
+
+  const handleDeletePlugin = async (id: string, name: string) => {
+    if (!window.confirm(`Bạn có chắc muốn xóa Plugin "${name}"?`)) return;
+    try {
+      const res = await fetch(`/api/plugins/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchPlugins();
+      }
+    } catch (err) {
+      console.error('Error deleting plugin:', err);
+    }
+  };
+
 
   const handleSaveTool = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,6 +329,84 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     t.category_slugs.some((c) => c.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
+            <Lock className="w-32 h-32 text-indigo-400" />
+          </div>
+
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 mb-4">
+              <SlidersHorizontal className="w-8 h-8" />
+            </div>
+            <h1 className="text-2xl font-black text-white">Đăng Nhập Quản Trị</h1>
+            <p className="text-xs text-slate-400 mt-2">Đăng nhập tài khoản Admin hệ thống website `congcu.minhthucmkt.vn`</p>
+          </div>
+
+          <div className="bg-slate-950/80 border border-indigo-500/20 rounded-2xl p-4 mb-6">
+            <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs mb-2">
+              <UserCheck className="w-4 h-4" />
+              <span>Tài khoản Admin hệ thống:</span>
+            </div>
+            <p className="text-xs text-slate-300">Tài khoản: <strong className="text-white">admin@minhthucmkt.vn</strong> (hoặc <strong className="text-white">admin</strong>)</p>
+            <p className="text-xs text-slate-300 mt-1">Mật khẩu: <strong className="text-amber-400">MinhThuc2026@Admin</strong></p>
+          </div>
+
+          {loginError && (
+            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold">
+              ⚠️ {loginError}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Tên đăng nhập / Email Admin</label>
+              <input
+                type="text"
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                placeholder="admin@minhthucmkt.vn"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Mật khẩu</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                placeholder="••••••••"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+            >
+              <Unlock className="w-4 h-4" />
+              <span>Đăng Nhập Quản Trị</span>
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <button
+              onClick={onBack}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              ← Về trang chủ công cụ
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 pb-24">
       {/* Admin Header */}
@@ -221,18 +423,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
               <SlidersHorizontal className="w-5 h-5 text-indigo-400" />
               <h1 className="text-lg font-bold text-white">Quản trị AI Tools Hub</h1>
               <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-500/20 text-indigo-300 rounded border border-indigo-500/30">
-                Admin Panel
+                Admin Domain Active
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               onClick={fetchAdminData}
               className="p-2 text-slate-400 hover:text-white rounded-lg bg-slate-800 border border-slate-700 transition-colors"
               title="Làm mới dữ liệu"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="px-3 py-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center gap-1.5 transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Đăng xuất</span>
             </button>
           </div>
         </div>
@@ -266,6 +476,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
           </button>
 
           <button
+            onClick={() => setActiveTab('plugins')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'plugins'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <Puzzle className="w-4 h-4 text-emerald-400" />
+            <span>Plugins & Công Cụ Ngoài ({plugins.length})</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('affiliate')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'affiliate'
@@ -289,6 +511,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             <span>Dữ liệu & Cài đặt Seed</span>
           </button>
         </div>
+
 
         {/* TAB 1: ANALYTICS & CLICKS */}
         {activeTab === 'analytics' && analytics && (
@@ -701,10 +924,239 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
               <p className="text-xs text-slate-400 leading-relaxed">
                 Tất cả các chuyển hướng qua route <code>/go/:slug</code> tự động ghi nhận referrer, timestamp và mã định danh chiến dịch mà không lưu trữ dữ liệu nhạy cảm của người dùng.
               </p>
+        {/* TAB 4: PLUGINS & EXTERNAL TOOLS */}
+        {activeTab === 'plugins' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+              <div>
+                <h3 className="text-base font-bold text-white mb-1 flex items-center gap-2">
+                  <Puzzle className="w-5 h-5 text-emerald-400" />
+                  <span>Quản lý Plugins & Công Cụ Bên Ngoài</span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Tạo thêm và quản lý các Plugin nhúng (iframe, affiliate link, script, widget) kết nối các công cụ AI mở rộng bên ngoài.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setEditingPlugin(null);
+                  setPluginFormData({
+                    name: '',
+                    slug: '',
+                    description: '',
+                    icon_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&auto=format&fit=crop&q=80',
+                    badge_text: 'HOT AI',
+                    type: 'iframe',
+                    external_url: 'https://',
+                    embed_code: '',
+                    category: 'office',
+                    status: 'active'
+                  });
+                  setIsAddPluginModalOpen(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg flex items-center gap-1.5 transition-all whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Thêm Plugin Mới</span>
+              </button>
+            </div>
+
+            {/* Plugins Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {plugins.map((plugin) => (
+                <div key={plugin.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition-all flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <img src={plugin.icon_url} alt={plugin.name} className="w-10 h-10 rounded-xl object-cover border border-slate-800" />
+                        <div>
+                          <h4 className="font-bold text-white text-sm">{plugin.name}</h4>
+                          <span className="text-[10px] text-slate-400 font-mono">/{plugin.slug}</span>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        {plugin.badge_text || 'PLUGIN'}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-400 line-clamp-2 mb-4">{plugin.description}</p>
+
+                    <div className="space-y-1.5 text-[11px] bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 mb-4">
+                      <div className="flex justify-between text-slate-400">
+                        <span>Loại Plugin:</span>
+                        <strong className="text-indigo-400 capitalize">{plugin.type}</strong>
+                      </div>
+                      <div className="flex justify-between text-slate-400">
+                        <span>Danh mục:</span>
+                        <strong className="text-slate-300">{plugin.category}</strong>
+                      </div>
+                      <div className="flex justify-between text-slate-400 truncate">
+                        <span>URL ngoài:</span>
+                        <a href={plugin.external_url} target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline max-w-[160px] truncate">
+                          {plugin.external_url}
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-800/80">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${plugin.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
+                      {plugin.status === 'active' ? '● Hoạt động' : 'Tắt'}
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingPlugin(plugin);
+                          setPluginFormData(plugin);
+                          setIsAddPluginModalOpen(true);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+                        title="Sửa Plugin"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeletePlugin(plugin.id, plugin.name)}
+                        className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800"
+                        title="Xóa Plugin"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
       </div>
+
+      {/* ADD / EDIT PLUGIN MODAL */}
+      {isAddPluginModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 sm:p-8 my-8 text-slate-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Puzzle className="w-5 h-5 text-emerald-400" />
+                <span>{editingPlugin ? `Sửa Plugin: ${editingPlugin.name}` : 'Thêm Plugin / Công Cụ Ngoài Mới'}</span>
+              </h3>
+              <button
+                onClick={() => setIsAddPluginModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePlugin} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Tên Plugin / Công cụ ngoài *</label>
+                  <input
+                    type="text"
+                    required
+                    value={pluginFormData.name || ''}
+                    onChange={(e) => setPluginFormData({ ...pluginFormData, name: e.target.value })}
+                    placeholder="vd: ChatGPT Plus Quick Generator"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Slug URL *</label>
+                  <input
+                    type="text"
+                    required
+                    value={pluginFormData.slug || ''}
+                    onChange={(e) => setPluginFormData({ ...pluginFormData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
+                    placeholder="chatgpt-quick-gen"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Mô tả ngắn gọn</label>
+                <textarea
+                  rows={2}
+                  value={pluginFormData.description || ''}
+                  onChange={(e) => setPluginFormData({ ...pluginFormData, description: e.target.value })}
+                  placeholder="Mô tả chức năng công cụ AI nhúng hoặc liên kết ngoài..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Loại Plugin</label>
+                  <select
+                    value={pluginFormData.type || 'iframe'}
+                    onChange={(e) => setPluginFormData({ ...pluginFormData, type: e.target.value as any })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="iframe">Nhúng Iframe</option>
+                    <option value="affiliate_link">Link Tiếp Thị Liên Kết</option>
+                    <option value="script">Script Tự Động</option>
+                    <option value="widget">Widget Tùy Biến</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Nhãn Badge (vd: HOT, NEW, PRO)</label>
+                  <input
+                    type="text"
+                    value={pluginFormData.badge_text || 'HOT AI'}
+                    onChange={(e) => setPluginFormData({ ...pluginFormData, badge_text: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Đường dẫn ngoài (URL Destination) *</label>
+                <input
+                  type="url"
+                  required
+                  value={pluginFormData.external_url || ''}
+                  onChange={(e) => setPluginFormData({ ...pluginFormData, external_url: e.target.value })}
+                  placeholder="https://chatgpt.com"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">URL Ảnh Icon Logo</label>
+                <input
+                  type="url"
+                  value={pluginFormData.icon_url || ''}
+                  onChange={(e) => setPluginFormData({ ...pluginFormData, icon_url: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddPluginModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Lưu Plugin</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
 
       {/* ADD / EDIT TOOL MODAL */}
       {isAddModalOpen && (

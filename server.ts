@@ -22,6 +22,49 @@ app.use(express.urlencoded({ extended: true }));
 // In-memory Database with Seed Initial State
 let toolsDb: Tool[] = JSON.parse(JSON.stringify(SEED_TOOLS));
 
+// External Plugins & Tools DB
+let pluginsDb: any[] = [
+  {
+    id: 'plugin_1',
+    name: 'ChatGPT Plus Quick Generator',
+    slug: 'chatgpt-quick-gen',
+    description: 'Trợ lý soạn thảo nội dung & prompt ChatGPT Plus tự động nhúng iframe',
+    icon_url: 'https://images.unsplash.com/photo-1677442136019-21780efad99a?w=128&auto=format&fit=crop&q=80',
+    badge_text: 'HOT AI',
+    type: 'iframe',
+    external_url: 'https://chatgpt.com',
+    category: 'office',
+    status: 'active',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'plugin_2',
+    name: 'Remotion Video Automation',
+    slug: 'remotion-video-auto',
+    description: 'Công cụ dựng video tự động từ kịch bản văn bản Remotion',
+    icon_url: 'https://images.unsplash.com/photo-1536240478700-b869070f9279?w=128&auto=format&fit=crop&q=80',
+    badge_text: 'PRO TOOL',
+    type: 'affiliate_link',
+    external_url: 'https://remotion.dev',
+    category: 'creator',
+    status: 'active',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'plugin_3',
+    name: 'OpenClaw AI Gateway',
+    slug: 'openclaw-gateway',
+    description: 'Cổng kết nối AI Gateway điều phối Gemini 2.5 & DeepSeek',
+    icon_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&auto=format&fit=crop&q=80',
+    badge_text: 'GATEWAY',
+    type: 'widget',
+    external_url: 'https://congcu.minhthucmkt.vn',
+    category: 'developer',
+    status: 'active',
+    created_at: new Date().toISOString()
+  }
+];
+
 // Mock / Initial Click Data for realistic analytics
 const initialClicks: AffiliateClick[] = [
   { id: 'c1', tool_id: 'tool_elevenlabs', tool_slug: 'elevenlabs', tool_name: 'ElevenLabs', created_at: new Date(Date.now() - 1000 * 60 * 15).toISOString(), referrer: 'https://google.com', utm_source: 'google_search', utm_medium: 'cpc', utm_campaign: 'voice_ai_kw' },
@@ -44,6 +87,71 @@ function getGeminiClient(): GoogleGenAI | null {
 }
 
 // ==================== API ROUTES ====================
+
+// Admin Login Endpoint
+app.post('/api/admin/login', (req, res) => {
+  const { username, password } = req.body;
+  if ((username === 'admin@minhthucmkt.vn' || username === 'admin') && password === 'MinhThuc2026@Admin') {
+    res.json({
+      success: true,
+      token: 'admin_session_token_minhthuc2026',
+      user: {
+        username: 'admin@minhthucmkt.vn',
+        name: 'Anh Thức Admin',
+        role: 'superadmin'
+      }
+    });
+  } else {
+    res.status(401).json({ error: 'Tên đăng nhập hoặc mật khẩu không chính xác' });
+  }
+});
+
+// Plugin API Endpoints
+app.get('/api/plugins', (req, res) => {
+  res.json({ plugins: pluginsDb });
+});
+
+app.post('/api/plugins', (req, res) => {
+  const body = req.body;
+  if (!body.name || !body.slug) {
+    res.status(400).json({ error: 'Tên plugin và slug là bắt buộc' });
+    return;
+  }
+  const newPlugin = {
+    id: `plugin_${Date.now()}`,
+    name: body.name,
+    slug: body.slug,
+    description: body.description || '',
+    icon_url: body.icon_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&auto=format&fit=crop&q=80',
+    badge_text: body.badge_text || 'NEW',
+    type: body.type || 'iframe',
+    external_url: body.external_url || 'https://',
+    embed_code: body.embed_code || '',
+    category: body.category || 'office',
+    status: body.status || 'active',
+    created_at: new Date().toISOString()
+  };
+  pluginsDb.unshift(newPlugin);
+  res.status(201).json(newPlugin);
+});
+
+app.put('/api/plugins/:id', (req, res) => {
+  const { id } = req.params;
+  const index = pluginsDb.findIndex((p) => p.id === id || p.slug === id);
+  if (index === -1) {
+    res.status(404).json({ error: 'Không tìm thấy plugin' });
+    return;
+  }
+  pluginsDb[index] = { ...pluginsDb[index], ...req.body };
+  res.json(pluginsDb[index]);
+});
+
+app.delete('/api/plugins/:id', (req, res) => {
+  const { id } = req.params;
+  pluginsDb = pluginsDb.filter((p) => p.id !== id && p.slug !== id);
+  res.json({ success: true, message: 'Đã xóa plugin' });
+});
+
 
 // Health Check
 app.get('/api/health', (req, res) => {

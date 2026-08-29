@@ -108,3 +108,19 @@ export interface RecommendationResult {
   matchScore: number;
   reasons: string[];
 }
+
+export interface PluginTool {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  icon_url: string;
+  badge_text?: string;
+  type: 'iframe' | 'affiliate_link' | 'script' | 'widget';
+  external_url: string;
+  embed_code?: string;
+  category: string;
+  status: 'active' | 'disabled';
+  created_at: string;
+}
+
